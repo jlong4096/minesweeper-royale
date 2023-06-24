@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script>
+    var socket;
+
+    function connect() {
+      socket = new WebSocket('wss://ee7x6e8uqc.execute-api.us-east-2.amazonaws.com/poc');
+
+      socket.onopen = function(event) {
+        console.log('Connected');
+      };
+
+      socket.onmessage = function(event) {
+        console.log('New message: ' + event.data);
+      };
+
+      socket.onerror = function(event) {
+        console.log('WebSocket error: ' + JSON.stringify(event));
+      };
+
+      socket.onclose = function(event) {
+        console.log('WebSocket connection closed');
+      };
+    }
+
+    window.onload = connect;
+  </script>
+</head>
+<body>
+  <h1>Receiver Page</h1>
+</body>
+</html>
+

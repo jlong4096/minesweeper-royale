@@ -1,0 +1,9 @@
+{
+  "name": "senderLambda",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.359.0"
+  }
+}

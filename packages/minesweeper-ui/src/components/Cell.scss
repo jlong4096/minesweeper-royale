@@ -1,0 +1,13 @@
+.cell {
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  border: 1px solid black;
+  background-color: lightgrey;
+  // box-shadow: inset -2px -2px 5px rgba(0,0,0,0.5), inset 2px 2px 5px rgba(255,255,255,0.5);
+
+  &.revealed {
+    background-color: white;
+    box-shadow: none;
+  }
+}

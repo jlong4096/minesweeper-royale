@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script>
+    $(document).ready(function(){
+      $("button").click(function(){
+        $.ajax({ url:"https://5h4r67jyla.execute-api.us-east-2.amazonaws.com",
+          type: "POST",
+          crossDomain: true,
+          data: JSON.stringify($("#message").val()),
+          dataType: "text",
+          success: function(data, status){
+            alert("Data: " + data + "\nStatus: " + status);
+          },
+          error: function (xhr, status) {
+            alert("error");
+          },
+        });
+      });
+    });
+  </script>
+</head>
+  <body>
+    <input id="message" type="text">Message</input>
+    <button id="button">Send!</button>
+  </body
+</html>
