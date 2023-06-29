@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { MyPOCCdkStack } from '../lib/my-cdk-stack';
+import { AwsCdkStack } from '../lib/aws-cdk-stack';
 
 const app = new cdk.App();
-new MyPOCCdkStack(app, 'MyPOCCdkStack', {
+new AwsCdkStack(app, 'AwsCdkStack', {
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */

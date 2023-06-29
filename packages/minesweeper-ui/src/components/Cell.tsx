@@ -1,13 +1,6 @@
 import React, { memo } from "react";
 import "./Cell.scss";
 
-export type CellType = {
-  hasMine: boolean;
-  revealed: boolean;
-  flagged: boolean;
-  adjacentMines: number;
-};
-
 export type CellProps = {
   cell: CellType;
   onClick: () => void;
@@ -18,6 +11,13 @@ export type CellProps = {
     bottom: boolean;
     left: boolean;
   };
+};
+
+export type CellType = {
+  hasMine: boolean;
+  revealed: boolean;
+  flagged: boolean;
+  adjacentMines: number;
 };
 
 const Cell: React.FC<CellProps> = memo(

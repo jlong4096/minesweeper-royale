@@ -2,6 +2,11 @@ import React, { useState, useEffect } from "react";
 import Cell, { CellType } from "./Cell";
 import "./Board.scss";
 
+export type BoardProps = {
+  onReveal: (x: number, y: number) => void;
+  onFlag: (x: number, y: number) => void;
+};
+
 type GridType = CellType[][];
 
 type MineCoordinate = {
@@ -198,7 +203,7 @@ function largestArea(grid: GridType): number[] {
   return maxCell;
 }
 
-const Board: React.FC = () => {
+const Board: React.FC<BoardProps> = ({ onReveal, onFlag }) => {
   const mineLocations = generateMineLocations(
     GRID_WIDTH,
     GRID_HEIGHT,
@@ -259,6 +264,7 @@ const Board: React.FC = () => {
 
     // Toggle the flagged status
     if (!newGrid[row][col].revealed) {
+      onFlag(row, col);
       newGrid[row][col].flagged = !newGrid[row][col].flagged;
     }
 
@@ -326,7 +332,10 @@ const Board: React.FC = () => {
                 key={cellIndex}
                 cell={cell}
                 neighborsRevealed={getNeighborsRevealed(rowIndex, cellIndex)}
-                onClick={() => handleCellClick(rowIndex, cellIndex)}
+                onClick={() => {
+                  onReveal(rowIndex, cellIndex);
+                  handleCellClick(rowIndex, cellIndex);
+                }}
                 onRightClick={() => handleRightClick(rowIndex, cellIndex)}
               />
             ))}
