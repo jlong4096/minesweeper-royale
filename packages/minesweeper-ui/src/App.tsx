@@ -1,10 +1,10 @@
 import Board from "./components/Board";
 import "./App.css";
 
-const GAME_ID = "5128a564-a704-4085-a0e8-8e52685e894b";
+const GAME_ID = "d43ca6d1-2890-4147-96c6-3de442454029";
 
 const ws = new WebSocket(
-  `wss://6sktzarvqj.execute-api.us-east-2.amazonaws.com/poc?gameId=${encodeURIComponent(
+  `wss://jokm6s5dl8.execute-api.us-east-2.amazonaws.com/poc?gameId=${encodeURIComponent(
     GAME_ID
   )}`
 );
@@ -33,33 +33,23 @@ ws.onclose = function (event) {
 };
 
 function App() {
-  const handleReveal = (x: number, y: number) => {
-    const action = {
-      gameId: GAME_ID,
-      reveal: {
-        x,
-        y,
-      },
+  const handleClickBuilder =
+    (ws: WebSocket, key: string): ((x: number, y: number) => void) =>
+    (x: number, y: number) => {
+      const action = {
+        gameId: GAME_ID,
+        [key]: { x, y },
+      };
+
+      ws.send(JSON.stringify(action));
     };
-
-    ws.send(JSON.stringify(action));
-  };
-
-  const handleFlag = (x: number, y: number) => {
-    const action = {
-      gameId: GAME_ID,
-      flag: {
-        x,
-        y,
-      },
-    };
-
-    ws.send(JSON.stringify(action));
-  };
 
   return (
     <>
-      <Board onReveal={handleReveal} onFlag={handleFlag} />
+      <Board
+        onLeftClick={handleClickBuilder(ws, "left")}
+        onRightClick={handleClickBuilder(ws, "right")}
+      />
     </>
   );
 }

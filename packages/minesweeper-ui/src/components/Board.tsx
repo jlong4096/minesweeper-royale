@@ -3,8 +3,8 @@ import Cell, { CellType } from "./Cell";
 import "./Board.scss";
 
 export type BoardProps = {
-  onReveal: (x: number, y: number) => void;
-  onFlag: (x: number, y: number) => void;
+  onLeftClick: (x: number, y: number) => void;
+  onRightClick: (x: number, y: number) => void;
 };
 
 type GridType = CellType[][];
@@ -203,7 +203,7 @@ function largestArea(grid: GridType): number[] {
   return maxCell;
 }
 
-const Board: React.FC<BoardProps> = ({ onReveal, onFlag }) => {
+const Board: React.FC<BoardProps> = ({ onLeftClick, onRightClick }) => {
   const mineLocations = generateMineLocations(
     GRID_WIDTH,
     GRID_HEIGHT,
@@ -264,7 +264,6 @@ const Board: React.FC<BoardProps> = ({ onReveal, onFlag }) => {
 
     // Toggle the flagged status
     if (!newGrid[row][col].revealed) {
-      onFlag(row, col);
       newGrid[row][col].flagged = !newGrid[row][col].flagged;
     }
 
@@ -333,10 +332,13 @@ const Board: React.FC<BoardProps> = ({ onReveal, onFlag }) => {
                 cell={cell}
                 neighborsRevealed={getNeighborsRevealed(rowIndex, cellIndex)}
                 onClick={() => {
-                  onReveal(rowIndex, cellIndex);
+                  onLeftClick(rowIndex, cellIndex);
                   handleCellClick(rowIndex, cellIndex);
                 }}
-                onRightClick={() => handleRightClick(rowIndex, cellIndex)}
+                onRightClick={() => {
+                  onRightClick(rowIndex, cellIndex);
+                  handleRightClick(rowIndex, cellIndex);
+                }}
               />
             ))}
           </div>

@@ -17,22 +17,13 @@ export class AwsCdkStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const connectionsTable = new dynamodb.Table(this, "ConnectionsTable", {
-      partitionKey: {
-        name: "gameId",
-        type: dynamodb.AttributeType.STRING,
-      },
-      sortKey: { name: "connectionId", type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-    });
-
     // The code that defines your stack goes here
     // const queue = new sqs.Queue(this, "PlayerActionsQueue");
 
     const gameManagerLambda = new lambda.Function(this, "GameManagerFunction", {
       runtime: lambda.Runtime.NODEJS_18_X,
       code: lambda.Code.fromAsset("../gameManagerLambda"),
-      handler: "lambda.handler",
+      handler: "compiled/lambda.handler",
       environment: {
         REGION: this.region,
         // QUEUE_URL: queue.queueUrl,
@@ -57,19 +48,20 @@ export class AwsCdkStack extends cdk.Stack {
       {
         runtime: lambda.Runtime.NODEJS_18_X,
         code: lambda.Code.fromAsset("../playerActionsLambda"),
-        handler: "playerActions.handler",
+        handler: "compiled/playerActions.handler",
         reservedConcurrentExecutions: 1,
         environment: {
           REGION: this.region,
           API_GW_ENDPOINT: `https://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}/`,
-          CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
-          PRIMARY_KEY: "gameId",
+          // CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
+          GAME_TABLE_NAME: gameTable.tableName,
+          PRIMARY_KEY: "id",
         },
       }
     );
 
-    // gameTable.grantReadWriteData(playerActionsLambda);
-    connectionsTable.grantReadWriteData(playerActionsLambda);
+    gameTable.grantReadWriteData(playerActionsLambda);
+    // connectionsTable.grantReadWriteData(playerActionsLambda);
     // queue.grantSendMessages(playerActionsLambda);
     webSocketApi.grantManageConnections(playerActionsLambda);
     // playerActionsLambda.addEventSource(new SqsEventSource(queue));
@@ -81,13 +73,13 @@ export class AwsCdkStack extends cdk.Stack {
       ),
     });
 
-    webSocketApi.addRoute("$disconnect", {
-      integration: new apigw_integ.WebSocketLambdaIntegration(
-        "DisconnectIntegration",
-        playerActionsLambda
-      ),
-    });
-
+    // webSocketApi.addRoute("$disconnect", {
+    //   integration: new apigw_integ.WebSocketLambdaIntegration(
+    //     "DisconnectIntegration",
+    //     playerActionsLambda
+    //   ),
+    // });
+    //
     webSocketApi.addRoute("$default", {
       integration: new apigw_integ.WebSocketLambdaIntegration(
         "DefaultItegration",
