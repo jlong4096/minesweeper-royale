@@ -1,37 +1,37 @@
-import { APIGatewayProxyWebsocketEventV2, Context } from "aws-lambda";
+import { APIGatewayProxyWebsocketEventV2, Context } from 'aws-lambda';
 
 import {
   ApiGatewayManagementApiClient,
-  PostToConnectionCommand,
-} from "@aws-sdk/client-apigatewaymanagementapi";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+  PostToConnectionCommand
+} from '@aws-sdk/client-apigatewaymanagementapi';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
   GetCommandInput,
   UpdateCommand,
-  UpdateCommandInput,
-} from "@aws-sdk/lib-dynamodb";
+  UpdateCommandInput
+} from '@aws-sdk/lib-dynamodb';
 
 const apigClient = new ApiGatewayManagementApiClient({
   region: process.env.REGION,
-  endpoint: process.env.API_GW_ENDPOINT,
+  endpoint: process.env.API_GW_ENDPOINT
 });
 
 const dbClient = new DynamoDBClient({ region: process.env.REGION });
 const dynamodb = DynamoDBDocumentClient.from(dbClient);
 const TableName = process.env.GAME_TABLE_NAME;
-const PrimaryKey = process.env.PRIMARY_KEY || "id";
+const PrimaryKey = process.env.PRIMARY_KEY || 'id';
 
 async function deleteConnections(gameId: string, connectionIds: string[]) {
-  console.log(`disconnection from ${connectionIds.join(", ")}`);
+  console.log(`disconnection from ${connectionIds.join(', ')}`);
 
   const params: UpdateCommandInput = {
     TableName,
     Key: { [PrimaryKey]: gameId },
-    UpdateExpression: "DELETE #con :removeConnection",
-    ExpressionAttributeNames: { "#con": "connections" },
-    ExpressionAttributeValues: { ":removeConnection": new Set(connectionIds) },
+    UpdateExpression: 'DELETE #con :removeConnection',
+    ExpressionAttributeNames: { '#con': 'connections' },
+    ExpressionAttributeValues: { ':removeConnection': new Set(connectionIds) }
   };
 
   await dynamodb.send(new UpdateCommand(params));
@@ -42,29 +42,29 @@ exports.handler = async function (
   context: Context
 ) {
   const connectionId = event.requestContext.connectionId;
-  if (event.requestContext.eventType === "CONNECT") {
+  if (event.requestContext.eventType === 'CONNECT') {
     // @ts-ignore
-    const gameId = event.queryStringParameters?.gameId || "game-x";
+    const gameId = event.queryStringParameters?.gameId || 'game-x';
     // Store connectionId
     console.log(`connection from ${connectionId} for ${gameId}`);
 
     const params: UpdateCommandInput = {
       TableName,
       Key: {
-        [PrimaryKey]: gameId,
+        [PrimaryKey]: gameId
       },
-      UpdateExpression: "ADD #con :newConnection",
-      ExpressionAttributeNames: { "#con": "connections" },
+      UpdateExpression: 'ADD #con :newConnection',
+      ExpressionAttributeNames: { '#con': 'connections' },
       ExpressionAttributeValues: {
-        ":newConnection": new Set([connectionId]),
-      },
+        ':newConnection': new Set([connectionId])
+      }
     };
 
     await dynamodb.send(new UpdateCommand(params));
   }
 
-  if (event.requestContext.eventType === "MESSAGE") {
-    const action = JSON.parse(event.body || "{}");
+  if (event.requestContext.eventType === 'MESSAGE') {
+    const action = JSON.parse(event.body || '{}');
     const gameId = action.gameId;
     console.log(
       // @ts-ignore
@@ -79,7 +79,7 @@ exports.handler = async function (
     const params: GetCommandInput = {
       TableName,
       Key: { [PrimaryKey]: gameId },
-      ProjectionExpression: "connections",
+      ProjectionExpression: 'connections'
     };
 
     const connections: string[] = [];
@@ -102,7 +102,7 @@ exports.handler = async function (
     const promises = connections.map(async (connectionId) => {
       const postCommand = new PostToConnectionCommand({
         ConnectionId: connectionId,
-        Data: event.body || "",
+        Data: event.body || ''
       });
 
       try {
@@ -128,5 +128,5 @@ exports.handler = async function (
     }
   }
 
-  return { statusCode: 200, body: "Data processed" };
+  return { statusCode: 200, body: 'Data processed' };
 };
