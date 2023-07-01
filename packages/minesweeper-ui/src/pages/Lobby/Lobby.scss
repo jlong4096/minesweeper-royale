@@ -1,0 +1,20 @@
+.game-list {
+  padding: 20px;
+
+  h2 {
+    margin-bottom: 20px;
+  }
+
+  .game {
+    margin-bottom: 10px;
+
+    .game-name {
+      margin-right: 10px;
+    }
+
+    .game-button {
+      margin-left: 30px;
+      margin-right: 5px;
+    }
+  }
+}

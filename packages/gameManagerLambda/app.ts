@@ -1,10 +1,12 @@
+import cors from '@fastify/cors';
 import { v4 as uuid } from 'uuid';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   PutCommand,
   DeleteCommand,
-  GetCommand
+  GetCommand,
+  ScanCommand
 } from '@aws-sdk/lib-dynamodb';
 import fastify, { FastifyInstance } from 'fastify';
 import {
@@ -12,6 +14,8 @@ import {
   generateMineLocations
 } from 'generateMineLocations-lib';
 
+const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '';
+const ALLOW_HEADERS = process.env.ALLOW_HEADERS;
 const GRID_WIDTH = 16;
 const GRID_HEIGHT = 30;
 const NUM_MINES = 99;
@@ -22,6 +26,12 @@ const TableName = process.env.GAME_TABLE_NAME;
 const PrimaryKey = process.env.PRIMARY_KEY || 'id';
 
 const app: FastifyInstance = fastify({ logger: true });
+
+(async () =>
+  await app.register(cors, {
+    origin: ALLOW_ORIGIN,
+    allowedHeaders: ALLOW_HEADERS
+  }))();
 
 interface Game {
   id: string;
@@ -37,7 +47,11 @@ app.post<{ Body: Game }>('/games', async (request, reply) => {
     coordinates: generateMineLocations(GRID_WIDTH, GRID_HEIGHT, NUM_MINES)
   };
   await dynamodb.send(new PutCommand({ TableName, Item: game }));
-  return game;
+  return { id: game.id, name: game.name };
+  // return reply.header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN).send({
+  //   id: game.id,
+  //   name: game.name
+  // });
 });
 
 // Get game
@@ -47,25 +61,38 @@ app.get<{ Params: { id: string } }>('/games/:id', async (request, reply) => {
     new GetCommand({
       TableName,
       Key: { [PrimaryKey]: id },
-      ProjectionExpression: 'id,name,coordinates'
+      ProjectionExpression: 'id,#n,coordinates',
+      ExpressionAttributeNames: { '#n': 'name' }
     })
   );
   return game;
+  // return reply.header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN).send(game);
 });
 
 // List all games
 app.get('/games', async (request, reply) => {
   const result = await dynamodb.send(
-    new ScanCommand({ TableName, ProjectionExpression: 'id,name' })
+    new ScanCommand({
+      TableName,
+      ProjectionExpression: 'id,#n',
+      ExpressionAttributeNames: { '#n': 'name' }
+    })
   );
+  console.log('games', result.Items);
   return result.Items;
+  // return reply
+  //   .header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN)
+  //   .send(result.Items);
 });
 
 // Delete a game
 app.delete<{ Params: { id: string } }>('/games/:id', async (request, reply) => {
   const id = request.params.id;
   await dynamodb.send(new DeleteCommand({ TableName, Key: { id } }));
-  return { message: `Game with ID ${id} deleted` };
+  return { message: `Game with ID ${id} delete` };
+  // return reply
+  //   .header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN)
+  //   .send({ message: `Game with ID ${id} deleted` });
 });
 
 export default app;

@@ -7,6 +7,9 @@ import * as apigw from "@aws-cdk/aws-apigatewayv2-alpha";
 import * as apigw_integ from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
+const ALLOW_ORIGIN = "http://localhost:5173";
+const ALLOW_HEADERS = ["Content-Type"];
+
 export class AwsCdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -29,6 +32,8 @@ export class AwsCdkStack extends cdk.Stack {
         // QUEUE_URL: queue.queueUrl,
         GAME_TABLE_NAME: gameTable.tableName,
         PRIMARY_KEY: "id",
+        ALLOW_ORIGIN,
+        ALLOW_HEADERS: ALLOW_HEADERS.join(","),
       },
     });
 
@@ -93,8 +98,9 @@ export class AwsCdkStack extends cdk.Stack {
         gameManagerLambda
       ),
       corsPreflight: {
-        allowOrigins: ["http://localhost:8000"],
+        allowOrigins: [ALLOW_ORIGIN],
         allowMethods: [apigw.CorsHttpMethod.ANY], // allow any method
+        allowHeaders: ALLOW_HEADERS,
       },
     });
 

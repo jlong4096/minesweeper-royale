@@ -11,4 +11,4 @@ export const handler = async (
   return proxy(event, context);
 };
 
-// await app.ready();
+(async () => await app.ready())();
