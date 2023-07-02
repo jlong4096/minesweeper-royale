@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { MineCoordinate, generateMineLocations } from "generateMineLocations-lib";
+import React, { useState, useEffect, useRef, useContext } from "react";
+import { MineCoordinate } from "generateMineLocations-lib";
+import { registerCallbackContext } from '../index.context';
 import Cell, { CellType } from "./Cell";
 import "./Board.scss";
 
 export type BoardProps = {
-  onLeftClick: (x: number, y: number) => void;
-  onRightClick: (x: number, y: number) => void;
+  playerId: string;
+  mines: MineCoordinate[];
+  viewOnly?: boolean;
+  onLeftClick?: (x: number, y: number) => void;
+  onRightClick?: (x: number, y: number) => void;
+  parentCb?: (fn: (leftClick: boolean, x: number, y: number) => void) => void;
 };
 
 type GridType = CellType[][];
@@ -168,19 +173,22 @@ function largestArea(grid: GridType): number[] {
   return maxCell;
 }
 
-const Board: React.FC<BoardProps> = ({ onLeftClick, onRightClick }) => {
-  const mineLocations = generateMineLocations(
-    GRID_WIDTH,
-    GRID_HEIGHT,
-    NUM_MINES
-  );
+const Board: React.FC<BoardProps> = ({ playerId, mines, viewOnly, onLeftClick, onRightClick }) => {
+  const loaded = useRef<boolean>(false);
+  const registerCbWithParent = useContext(registerCallbackContext);
+
   const [grid, setGrid] = useState<GridType>(
-    createEmptyGrid(GRID_WIDTH, GRID_HEIGHT, mineLocations)
+    createEmptyGrid(GRID_WIDTH, GRID_HEIGHT, mines)
   );
   const [unflaggedCount, setUnflaggedCount] = useState<number>(NUM_MINES);
 
   useEffect(() => {
+    if (loaded.current) return;
+    loaded.current = true;
+
     // Run on startup
+    if (registerCbWithParent) registerCbWithParent(handleCb);
+
     const [revealX, revealY] = largestArea(grid);
     handleCellClick(revealX, revealY);
   }, []);
@@ -195,6 +203,16 @@ const Board: React.FC<BoardProps> = ({ onLeftClick, onRightClick }) => {
     const numFlagged = arr.reduce((acc: number, cur: number) => acc + cur);
     setUnflaggedCount(NUM_MINES - numFlagged);
   }, [grid]);
+
+  const handleCb = (pId: string, leftClick: boolean, x: number, y: number) => {
+    // Callback shenanigans so the parent can trigger a click from a websocket message
+    if (playerId !== pId) return;
+    if (leftClick) {
+      handleCellClick(x, y);
+    } else {
+      handleRightClick(x, y);
+    }
+  };
 
   const computeNewGridState = (
     row: number,
@@ -286,7 +304,7 @@ const Board: React.FC<BoardProps> = ({ onLeftClick, onRightClick }) => {
   };
 
   return (
-    <div>
+    <div className="board-root">
       {unflaggedCount}
       <div className="board">
         {grid.map((row, rowIndex) => (
@@ -297,11 +315,13 @@ const Board: React.FC<BoardProps> = ({ onLeftClick, onRightClick }) => {
                 cell={cell}
                 neighborsRevealed={getNeighborsRevealed(rowIndex, cellIndex)}
                 onClick={() => {
-                  onLeftClick(rowIndex, cellIndex);
+                  if (viewOnly) return;
+                  if (onLeftClick) onLeftClick(rowIndex, cellIndex);
                   handleCellClick(rowIndex, cellIndex);
                 }}
                 onRightClick={() => {
-                  onRightClick(rowIndex, cellIndex);
+                  if (viewOnly) return;
+                  if (onRightClick) onRightClick(rowIndex, cellIndex);
                   handleRightClick(rowIndex, cellIndex);
                 }}
               />

@@ -1,0 +1,16 @@
+.navbar {
+  display: flex;
+}
+
+.game-field {
+  display: flex;
+
+  .opponent-field {
+    display: flex;
+    flex-direction: column;
+
+    .opponent-board {
+      transform: scale(0.33);
+    }
+  }
+}

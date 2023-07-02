@@ -71,12 +71,12 @@ export class AwsCdkStack extends cdk.Stack {
     webSocketApi.grantManageConnections(playerActionsLambda);
     // playerActionsLambda.addEventSource(new SqsEventSource(queue));
 
-    webSocketApi.addRoute("$connect", {
-      integration: new apigw_integ.WebSocketLambdaIntegration(
-        "ConnectIntegration",
-        playerActionsLambda
-      ),
-    });
+    // webSocketApi.addRoute("$connect", {
+    //   integration: new apigw_integ.WebSocketLambdaIntegration(
+    //     "ConnectIntegration",
+    //     playerActionsLambda
+    //   ),
+    // });
 
     // webSocketApi.addRoute("$disconnect", {
     //   integration: new apigw_integ.WebSocketLambdaIntegration(

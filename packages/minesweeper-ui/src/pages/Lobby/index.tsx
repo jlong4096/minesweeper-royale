@@ -1,24 +1,13 @@
-// import { useQuery } from 'react-query';
 import { useState, useEffect } from 'react';
-import { MineCoordinate } from 'generateMineLocations-lib';
+import { useNavigate } from 'react-router-dom';
+import { Game } from '@/types';
 import './Lobby.scss';
 
 const GAME_URL = import.meta.env.VITE_GAME_MANAGER_URL;
 
-interface Game {
-  id: string;
-  name: string;
-  coordinates: MineCoordinate[];
-}
-
-// const fetchGames = async (): Promise<Game[]> => {
-//   const res = await fetch(GAME_URL, );
-//   return res.json();
-// };
-//
 function Lobby() {
-  // const { data: games } = useQuery('games', fetchGames);
   const [ games, setGames ] = useState<Game[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchGames() {
@@ -34,11 +23,6 @@ function Lobby() {
     fetchGames();
     return () => { ignore = true };
   }, []);
-
-  const handleJoin = (gameId: string) => {
-    // handle the join game logic here
-    console.log(`Joining game with id: ${gameId}`);
-  };
 
   const handleCreate = async () => {
     // handle the create game logic here
@@ -75,7 +59,7 @@ function Lobby() {
       {games?.map((game) => (
         <div key={game.id} className="game">
           <span className="game-name">{game.name}</span>
-          <button onClick={() => handleJoin(`${game.id}`)} className="game-button">
+          <button onClick={() => navigate(`/game/${game.id}`)} className="game-button">
             Join
           </button>
           <button onClick={() => handleDelete(`${game.id}`)} className="game-button">

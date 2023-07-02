@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'url';
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 
@@ -10,6 +11,11 @@ export default defineConfig({
   build: {
     commonjsOptions: {
       include: [/generateMineLocations-lib/, /node_modules/],
+    },
+  },
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
 })

@@ -48,10 +48,6 @@ app.post<{ Body: Game }>('/games', async (request, reply) => {
   };
   await dynamodb.send(new PutCommand({ TableName, Item: game }));
   return { id: game.id, name: game.name };
-  // return reply.header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN).send({
-  //   id: game.id,
-  //   name: game.name
-  // });
 });
 
 // Get game
@@ -65,8 +61,7 @@ app.get<{ Params: { id: string } }>('/games/:id', async (request, reply) => {
       ExpressionAttributeNames: { '#n': 'name' }
     })
   );
-  return game;
-  // return reply.header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN).send(game);
+  return game.Item;
 });
 
 // List all games
@@ -80,9 +75,6 @@ app.get('/games', async (request, reply) => {
   );
   console.log('games', result.Items);
   return result.Items;
-  // return reply
-  //   .header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN)
-  //   .send(result.Items);
 });
 
 // Delete a game
@@ -90,9 +82,6 @@ app.delete<{ Params: { id: string } }>('/games/:id', async (request, reply) => {
   const id = request.params.id;
   await dynamodb.send(new DeleteCommand({ TableName, Key: { id } }));
   return { message: `Game with ID ${id} delete` };
-  // return reply
-  //   .header('ACCESS-CONTROL-ALLOW-ORIGIN', ALLOW_ORIGIN)
-  //   .send({ message: `Game with ID ${id} deleted` });
 });
 
 export default app;
