@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import GamePage from './pages/Game';
+import GamePage from "./pages/Game";
 import LobbyPage from './pages/Lobby';
-import "./App.css";
+import './App.css';
 
 function App() {
   return (

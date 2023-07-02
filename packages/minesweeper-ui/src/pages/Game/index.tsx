@@ -12,15 +12,17 @@ const WEBSOCKET_URL = import.meta.env.VITE_PLAYER_ACTIONS_WS;
 function Game() {
   const { gameId } = useParams();
 
-  const ws = useRef<WebSocket | null>(null)
+  const ws = useRef<WebSocket | null>(null);
   const loaded = useRef<boolean>(false);
   const callbacks = useRef<Callback[]>([]);
 
-  const [ mines, setMines ] = useState<MineCoordinate[]>([]);
-  const [ playerId, setPlayerId ] = useState<string>('');
-  const [ otherPlayers, setOtherPlayers ] = useState<string[]>([]);
+  const [mines, setMines] = useState<MineCoordinate[]>([]);
+  const [playerId, setPlayerId] = useState<string>('');
+  const [otherPlayers, setOtherPlayers] = useState<string[]>([]);
 
-  const registerCb = (cb: Callback) => { callbacks.current.push(cb); };
+  const registerCb = (cb: Callback) => {
+    callbacks.current.push(cb);
+  };
 
   useEffect(() => {
     if (loaded.current) {
@@ -49,13 +51,13 @@ function Game() {
 
         ws.current.onopen = function () {
           if (ws.current) {
-            console.log("Client is ready");
+            console.log('Client is ready');
             ws.current.send(JSON.stringify({ event: 'READY', gameId: gameId }));
           }
         };
 
         ws.current.onmessage = function (event) {
-          console.log("New message: " + event.data);
+          console.log('New message: ' + event.data);
           const action = JSON.parse(event.data);
           // TODO:  Capture and share all possible message types.
           if (action.event === 'JOINED') {
@@ -76,11 +78,11 @@ function Game() {
         };
 
         ws.current.onerror = function (event) {
-          console.log("WebSocket error: " + JSON.stringify(event));
+          console.log('WebSocket error: ' + JSON.stringify(event));
         };
 
         ws.current.onclose = function () {
-          console.log("WebSocket connection closed");
+          console.log('WebSocket connection closed');
         };
       }
     }
@@ -88,7 +90,7 @@ function Game() {
     let ignore = false;
     fetchGame();
     return () => {
-      ignore = true ;
+      ignore = true;
       if (ws.current) {
         console.log('Disconnecting WS...');
         ws.current.close();
@@ -107,7 +109,7 @@ function Game() {
         event: 'ACTION',
         gameId: gameId,
         // TODO:  This is kind of annoying elsewhere.
-        [key]: { x, y },
+        [key]: { x, y }
       };
 
       ws.send(JSON.stringify(action));
@@ -121,15 +123,23 @@ function Game() {
         </div>
         <div className="game-field">
           <div className="player-board">
-            { mines && mines.length && <Board
-              playerId={playerId}
-              mines={mines}
-              onLeftClick={handleClickBuilder(ws.current, "left")}
-              onRightClick={handleClickBuilder(ws.current, "right")}
-            />}
+            {mines && mines.length && (
+              <Board
+                playerId={playerId}
+                mines={mines}
+                onLeftClick={handleClickBuilder(ws.current, 'left')}
+                onRightClick={handleClickBuilder(ws.current, 'right')}
+              />
+            )}
           </div>
           <div className="opponent-field">
-            { otherPlayers.filter((otherId) => otherId !== playerId).map((otherId) => (<div key={otherId} className="opponent-board"><Board playerId={otherId} mines={mines} viewOnly /></div>)) }
+            {otherPlayers
+              .filter((otherId) => otherId !== playerId)
+              .map((otherId) => (
+                <div key={otherId} className="opponent-board">
+                  <Board playerId={otherId} mines={mines} viewOnly />
+                </div>
+              ))}
           </div>
         </div>
       </div>

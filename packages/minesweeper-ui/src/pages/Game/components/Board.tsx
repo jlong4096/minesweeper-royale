@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useContext } from "react";
-import { MineCoordinate } from "generateMineLocations-lib";
+import React, { useState, useEffect, useRef, useContext } from 'react';
+import { MineCoordinate } from 'generateMineLocations-lib';
 import { registerCallbackContext } from '../index.context';
-import Cell, { CellType } from "./Cell";
-import "./Board.scss";
+import Cell, { CellType } from './Cell';
+import './Board.scss';
 
 export type BoardProps = {
   playerId: string;
@@ -68,7 +68,7 @@ const createEmptyGrid = (
         hasMine: false,
         revealed: false,
         flagged: false,
-        adjacentMines: 0,
+        adjacentMines: 0
       });
     }
     grid.push(newRow);
@@ -173,7 +173,13 @@ function largestArea(grid: GridType): number[] {
   return maxCell;
 }
 
-const Board: React.FC<BoardProps> = ({ playerId, mines, viewOnly, onLeftClick, onRightClick }) => {
+const Board: React.FC<BoardProps> = ({
+  playerId,
+  mines,
+  viewOnly,
+  onLeftClick,
+  onRightClick
+}) => {
   const loaded = useRef<boolean>(false);
   const registerCbWithParent = useContext(registerCallbackContext);
 

@@ -6,14 +6,14 @@ import './Lobby.scss';
 const GAME_URL = import.meta.env.VITE_GAME_MANAGER_URL;
 
 function Lobby() {
-  const [ games, setGames ] = useState<Game[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchGames() {
       if (!ignore) {
         console.log('fetching games');
-        const res = await fetch(GAME_URL );
+        const res = await fetch(GAME_URL);
         const games = await res.json();
         setGames(games);
       }
@@ -21,18 +21,20 @@ function Lobby() {
 
     let ignore = false;
     fetchGames();
-    return () => { ignore = true };
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const handleCreate = async () => {
     // handle the create game logic here
     console.log('Creating new game');
     const res = await fetch(GAME_URL, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ name: `Game ${games?.length || 0}`}),
+      body: JSON.stringify({ name: `Game ${games?.length || 0}` })
     });
 
     const game = await res.json();
@@ -43,7 +45,7 @@ function Lobby() {
     // handle the create game logic here
     console.log(`Deleting game ${GAME_URL}/${id}`);
     await fetch(`${GAME_URL}/${id}`, {
-      method: "DELETE",
+      method: 'DELETE'
     });
     const idx = games.findIndex((g) => g.id === id);
     if (idx > -1) {
@@ -59,10 +61,16 @@ function Lobby() {
       {games?.map((game) => (
         <div key={game.id} className="game">
           <span className="game-name">{game.name}</span>
-          <button onClick={() => navigate(`/game/${game.id}`)} className="game-button">
+          <button
+            onClick={() => navigate(`/game/${game.id}`)}
+            className="game-button"
+          >
             Join
           </button>
-          <button onClick={() => handleDelete(`${game.id}`)} className="game-button">
+          <button
+            onClick={() => handleDelete(`${game.id}`)}
+            className="game-button"
+          >
             Delete
           </button>
         </div>

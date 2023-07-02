@@ -1,5 +1,5 @@
-import React, { memo } from "react";
-import "./Cell.scss";
+import React, { memo } from 'react';
+import './Cell.scss';
 
 export type CellProps = {
   cell: CellType;
@@ -23,17 +23,17 @@ export type CellType = {
 const Cell: React.FC<CellProps> = memo(
   ({ cell, neighborsRevealed, onClick, onRightClick }) => {
     const numColors = [
-      "#0000FF",
-      "#008000",
-      "#FF0000",
-      "#000080",
-      "#800000",
-      "#008080",
-      "#000000",
-      "#808080",
+      '#0000FF',
+      '#008000',
+      '#FF0000',
+      '#000080',
+      '#800000',
+      '#008080',
+      '#000000',
+      '#808080'
     ];
-    const bomb = "\u{1F4A3}";
-    const flag = "\u{1F6A9}";
+    const bomb = '\u{1F4A3}';
+    const flag = '\u{1F6A9}';
 
     const { hasMine, revealed, flagged, adjacentMines } = cell;
     const mineRevealed = hasMine && revealed;
@@ -41,7 +41,7 @@ const Cell: React.FC<CellProps> = memo(
     const mineFlagged = !revealed && flagged;
 
     const calcBorderColor = (revealed: boolean): string => {
-      return revealed ? "white" : "black";
+      return revealed ? 'white' : 'black';
     };
 
     const handleRightClick = (e: React.MouseEvent) => {
@@ -51,7 +51,7 @@ const Cell: React.FC<CellProps> = memo(
 
     return (
       <div
-        className={`cell ${revealed && "revealed"}`}
+        className={`cell ${revealed && 'revealed'}`}
         style={{
           borderTopColor: calcBorderColor(revealed && neighborsRevealed.top),
           borderRightColor: calcBorderColor(
@@ -61,7 +61,7 @@ const Cell: React.FC<CellProps> = memo(
             revealed && neighborsRevealed.bottom
           ),
           borderLeftColor: calcBorderColor(revealed && neighborsRevealed.left),
-          color: numRevealed ? numColors[adjacentMines - 1] : "black",
+          color: numRevealed ? numColors[adjacentMines - 1] : 'black'
         }}
         onClick={() => {
           if (!flagged) {
