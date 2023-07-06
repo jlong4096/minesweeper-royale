@@ -6,10 +6,14 @@
   display: flex;
 
   .opponent-field {
+    flex-grow: 1;
     display: flex;
-    flex-direction: column;
+    flex-flow: column wrap;
+    max-height: 650px;
 
     .opponent-board {
+      flex-grow: 1;
+      height: 225px;
       transform: scale(0.33);
     }
   }
