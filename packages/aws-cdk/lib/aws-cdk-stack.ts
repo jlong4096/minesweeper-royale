@@ -1,6 +1,5 @@
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
-import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -9,10 +8,8 @@ import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as route53targets from "aws-cdk-lib/aws-route53-targets";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
-import * as iam from "aws-cdk-lib/aws-iam";
 import * as apigw from "@aws-cdk/aws-apigatewayv2-alpha";
 import * as apigw_integ from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
-// import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
 const ALLOW_ORIGINS = [
   "http://localhost:5173",
@@ -64,15 +61,11 @@ export class AwsCdkStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // The code that defines your stack goes here
-    // const queue = new sqs.Queue(this, "PlayerActionsQueue");
-
     //
     // Setup frontend
     //
     const staticBucket = new s3.Bucket(this, "MinesweeperRoyaleStaticBucket", {
       websiteIndexDocument: "index.html",
-      // publicReadAccess: true,
       autoDeleteObjects: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -107,16 +100,12 @@ export class AwsCdkStack extends cdk.Stack {
       }
     );
 
-    const staticDeploy = new s3deploy.BucketDeployment(
-      this,
-      "DeployStaticAssets",
-      {
-        sources: [s3deploy.Source.asset("../minesweeper-ui/dist")],
-        destinationBucket: staticBucket,
-        distribution,
-        distributionPaths: ["/*"],
-      }
-    );
+    new s3deploy.BucketDeployment(this, "DeployStaticAssets", {
+      sources: [s3deploy.Source.asset("../minesweeper-ui/dist")],
+      destinationBucket: staticBucket,
+      distribution,
+      distributionPaths: ["/*"],
+    });
 
     new route53.ARecord(this, "MinesweeperRoyaleCloudFrontAliasRecord", {
       zone: zone,
@@ -135,7 +124,6 @@ export class AwsCdkStack extends cdk.Stack {
       handler: "compiled/lambda.handler",
       environment: {
         REGION: this.region,
-        // QUEUE_URL: queue.queueUrl,
         GAME_TABLE_NAME: gameTable.tableName,
         PRIMARY_KEY: "id",
         ALLOW_ORIGIN: "*",
@@ -144,7 +132,6 @@ export class AwsCdkStack extends cdk.Stack {
     });
 
     gameTable.grantReadWriteData(gameManagerLambda);
-    // queue.grantSendMessages(gameManagerLambda);
 
     const httpDomain = new apigw.DomainName(
       this,
@@ -167,7 +154,6 @@ export class AwsCdkStack extends cdk.Stack {
       },
       defaultDomainMapping: {
         domainName: httpDomain,
-        mappingKey: "MinesweeperRoyaleHttpApiDomainName",
       },
     });
 
@@ -208,7 +194,6 @@ export class AwsCdkStack extends cdk.Stack {
         autoDeploy: true,
         domainMapping: {
           domainName: wsDomain,
-          mappingKey: "MinesweeperRoyaleWsApiDomainName",
         },
       }
     );
@@ -224,7 +209,6 @@ export class AwsCdkStack extends cdk.Stack {
         environment: {
           REGION: this.region,
           API_GW_ENDPOINT: `https://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}/`,
-          // CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
           GAME_TABLE_NAME: gameTable.tableName,
           PRIMARY_KEY: "id",
         },
@@ -232,25 +216,8 @@ export class AwsCdkStack extends cdk.Stack {
     );
 
     gameTable.grantReadWriteData(playerActionsLambda);
-    // connectionsTable.grantReadWriteData(playerActionsLambda);
-    // queue.grantSendMessages(playerActionsLambda);
     webSocketApi.grantManageConnections(playerActionsLambda);
-    // playerActionsLambda.addEventSource(new SqsEventSource(queue));
 
-    // webSocketApi.addRoute("$connect", {
-    //   integration: new apigw_integ.WebSocketLambdaIntegration(
-    //     "ConnectIntegration",
-    //     playerActionsLambda
-    //   ),
-    // });
-
-    // webSocketApi.addRoute("$disconnect", {
-    //   integration: new apigw_integ.WebSocketLambdaIntegration(
-    //     "DisconnectIntegration",
-    //     playerActionsLambda
-    //   ),
-    // });
-    //
     webSocketApi.addRoute("$default", {
       integration: new apigw_integ.WebSocketLambdaIntegration(
         "DefaultItegration",
@@ -272,9 +239,5 @@ export class AwsCdkStack extends cdk.Stack {
     new cdk.CfnOutput(this, "WebsocketURL", {
       value: webSocketApi.apiEndpoint,
     });
-
-    // new cdk.CfnOutput(this, "DistributionDomainName", {
-    //   value: distribution.distributionDomainName,
-    // });
   }
 }
