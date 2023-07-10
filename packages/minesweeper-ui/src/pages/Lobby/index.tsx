@@ -58,7 +58,7 @@ function Lobby() {
   return (
     <div className="game-list">
       <h2>Available Games</h2>
-      {games?.map((game) => (
+      {Array.isArray(games) && games.map((game) => (
         <div key={game.id} className="game">
           <span className="game-name">{game.name}</span>
           <button

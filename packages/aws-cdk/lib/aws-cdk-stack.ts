@@ -10,6 +10,8 @@ import * as route53targets from "aws-cdk-lib/aws-route53-targets";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as apigw from "@aws-cdk/aws-apigatewayv2-alpha";
 import * as apigw_integ from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as logs from "aws-cdk-lib/aws-logs";
 
 const ALLOW_ORIGINS = [
   "http://localhost:5173",
@@ -66,6 +68,7 @@ export class AwsCdkStack extends cdk.Stack {
     //
     const staticBucket = new s3.Bucket(this, "MinesweeperRoyaleStaticBucket", {
       websiteIndexDocument: "index.html",
+      websiteErrorDocument: "index.html", // Allows other routes to work.  Has SEO implications.  Created robots.txt to minimize implications
       autoDeleteObjects: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -97,6 +100,13 @@ export class AwsCdkStack extends cdk.Stack {
             behaviors: [{ isDefaultBehavior: true }],
           },
         ],
+        errorConfigurations: [
+          {
+            errorCode: 404,
+            responseCode: 200,
+            responsePagePath: "/index.html",
+          },
+        ],
       }
     );
 
@@ -122,6 +132,7 @@ export class AwsCdkStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_18_X,
       code: lambda.Code.fromAsset("../gameManagerLambda"),
       handler: "compiled/lambda.handler",
+      reservedConcurrentExecutions: 1,
       environment: {
         REGION: this.region,
         GAME_TABLE_NAME: gameTable.tableName,
