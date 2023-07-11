@@ -13,6 +13,14 @@ import {
   UpdateCommandInput
 } from '@aws-sdk/lib-dynamodb';
 
+import {
+  ReadyMessage,
+  ActionMessage,
+  JoinedMessage,
+  WelcomeMessage,
+  AnnounceMessage
+} from 'playerActions-lib';
+
 const apigClient = new ApiGatewayManagementApiClient({
   region: process.env.REGION,
   endpoint: process.env.API_GW_ENDPOINT
@@ -22,35 +30,6 @@ const dbClient = new DynamoDBClient({ region: process.env.REGION });
 const dynamodb = DynamoDBDocumentClient.from(dbClient);
 const TableName = process.env.GAME_TABLE_NAME;
 const PrimaryKey = process.env.PRIMARY_KEY || 'id';
-
-// Incoming messages
-interface ReadyMessage {
-  event: 'READY';
-  gameId: string;
-}
-
-interface ActionMessage {
-  event: 'ACTION';
-  gameId: string;
-  left?: { x: number; y: number };
-  right?: { x: number; y: number };
-}
-
-// Outgoing messages
-interface JoinedMessage {
-  event: 'JOINED';
-  connectionId: string;
-  allConnectionIds: string[];
-}
-
-interface WelcomeMessage {
-  event: 'WELCOME';
-  newConnectionId: string;
-}
-
-interface AnnounceMessage extends ActionMessage {
-  connectionId: string;
-}
 
 async function deleteConnections(gameId: string, connectionIds: string[]) {
   console.log(`disconnection from ${connectionIds.join(', ')}`);

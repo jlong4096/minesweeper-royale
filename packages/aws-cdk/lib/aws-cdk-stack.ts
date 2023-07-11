@@ -27,9 +27,210 @@ const GLOBAL_CERTIFICATE_ARN =
 const REGIONAL_CERTIFICATE_ARN =
   "arn:aws:acm:us-east-2:439377653485:certificate/51821d31-66b9-4cae-91cb-74de12fcd726";
 
+function deployFrontend(
+  stack: cdk.Stack,
+  zone: route53.IHostedZone,
+  globalCertificate: acm.ICertificate
+) {
+  const staticBucket = new s3.Bucket(stack, "MinesweeperRoyaleStaticBucket", {
+    websiteIndexDocument: "index.html",
+    websiteErrorDocument: "index.html", // Allows other routes to work.  Has SEO implications.  Created robots.txt to minimize implications
+    autoDeleteObjects: true,
+    removalPolicy: cdk.RemovalPolicy.DESTROY,
+    blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+  });
+
+  const OAI = new cloudfront.OriginAccessIdentity(stack, "OAI", {
+    comment: "OAI for MinesweeperRoyaleStaticBucket",
+  });
+  staticBucket.grantRead(OAI);
+
+  const distribution = new cloudfront.CloudFrontWebDistribution(
+    stack,
+    "StaticDistribution",
+    {
+      viewerCertificate: cloudfront.ViewerCertificate.fromAcmCertificate(
+        globalCertificate,
+        {
+          aliases: ["www.minesweeper-royale.com"],
+          securityPolicy: cloudfront.SecurityPolicyProtocol.TLS_V1_1_2016,
+          sslMethod: cloudfront.SSLMethod.SNI,
+        }
+      ),
+      originConfigs: [
+        {
+          s3OriginSource: {
+            s3BucketSource: staticBucket,
+            originAccessIdentity: OAI,
+          },
+          behaviors: [{ isDefaultBehavior: true }],
+        },
+      ],
+      errorConfigurations: [
+        {
+          errorCode: 404,
+          responseCode: 200,
+          responsePagePath: "/index.html",
+        },
+      ],
+    }
+  );
+
+  new s3deploy.BucketDeployment(stack, "DeployStaticAssets", {
+    sources: [s3deploy.Source.asset("../minesweeper-ui/dist")],
+    destinationBucket: staticBucket,
+    distribution,
+    distributionPaths: ["/*"],
+  });
+
+  new route53.ARecord(stack, "MinesweeperRoyaleCloudFrontAliasRecord", {
+    zone: zone,
+    recordName: "www",
+    target: route53.RecordTarget.fromAlias(
+      new route53targets.CloudFrontTarget(distribution)
+    ),
+  });
+}
+
+function deployGameManagerFunction(
+  stack: cdk.Stack,
+  zone: route53.IHostedZone,
+  regionalCertificate: acm.ICertificate,
+  gameTable: dynamodb.Table
+) {
+  const gameManagerLambda = new lambda.Function(stack, "GameManagerFunction", {
+    runtime: lambda.Runtime.NODEJS_18_X,
+    code: lambda.Code.fromAsset("../gameManagerLambda"),
+    handler: "compiled/lambda.handler",
+    reservedConcurrentExecutions: 1,
+    environment: {
+      REGION: stack.region,
+      GAME_TABLE_NAME: gameTable.tableName,
+      PRIMARY_KEY: "id",
+      ALLOW_ORIGIN: "*",
+      ALLOW_HEADERS: ALLOW_HEADERS.join(","),
+    },
+  });
+
+  gameTable.grantReadWriteData(gameManagerLambda);
+
+  const httpDomain = new apigw.DomainName(
+    stack,
+    "MinesweeperRoyaleApiDomainName",
+    {
+      domainName: "api.minesweeper-royale.com",
+      certificate: regionalCertificate,
+    }
+  );
+
+  const httpApi = new apigw.HttpApi(stack, "MinesweeperRoyaleHttpApi", {
+    defaultIntegration: new apigw_integ.HttpLambdaIntegration(
+      "DefaultIntegration",
+      gameManagerLambda
+    ),
+    corsPreflight: {
+      allowOrigins: ALLOW_ORIGINS,
+      allowMethods: [apigw.CorsHttpMethod.ANY], // allow any method
+      allowHeaders: ALLOW_HEADERS,
+    },
+    defaultDomainMapping: {
+      domainName: httpDomain,
+    },
+  });
+
+  new route53.ARecord(stack, "MinesweeperRoyaleApiGatewayAliasRecord", {
+    zone: zone,
+    recordName: "api",
+    target: route53.RecordTarget.fromAlias(
+      new route53targets.ApiGatewayv2DomainProperties(
+        httpDomain.regionalDomainName,
+        httpDomain.regionalHostedZoneId
+      )
+    ),
+  });
+
+  new cdk.CfnOutput(stack, "ApiGatewayURL", {
+    value: httpApi.apiEndpoint,
+  });
+}
+
+function deployPlayerActionsFunction(
+  stack: cdk.Stack,
+  zone: route53.IHostedZone,
+  regionalCertificate: acm.ICertificate,
+  gameTable: dynamodb.Table
+) {
+  const wsDomain = new apigw.DomainName(
+    stack,
+    "MinesweeperRoyaleWsDomainName",
+    {
+      domainName: "ws.minesweeper-royale.com",
+      certificate: regionalCertificate,
+    }
+  );
+
+  const webSocketApi = new apigw.WebSocketApi(stack, "PlayerActionsWebSocket");
+  const webSocketStage = new apigw.WebSocketStage(
+    stack,
+    "MinesweeperRoyaleWsStage",
+    {
+      webSocketApi,
+      stageName: "poc",
+      autoDeploy: true,
+      domainMapping: {
+        domainName: wsDomain,
+      },
+    }
+  );
+
+  const playerActionsLambda = new lambda.Function(
+    stack,
+    "PlayerActionsFunction",
+    {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      code: lambda.Code.fromAsset("../playerActionsLambda"),
+      handler: "compiled/playerActions.handler",
+      reservedConcurrentExecutions: 1,
+      environment: {
+        REGION: stack.region,
+        API_GW_ENDPOINT: `https://${webSocketApi.apiId}.execute-api.${stack.region}.amazonaws.com/${webSocketStage.stageName}/`,
+        GAME_TABLE_NAME: gameTable.tableName,
+        PRIMARY_KEY: "id",
+      },
+    }
+  );
+
+  gameTable.grantReadWriteData(playerActionsLambda);
+  webSocketApi.grantManageConnections(playerActionsLambda);
+
+  webSocketApi.addRoute("$default", {
+    integration: new apigw_integ.WebSocketLambdaIntegration(
+      "DefaultItegration",
+      playerActionsLambda
+    ),
+  });
+
+  new route53.ARecord(stack, "MinesweeperRoyaleWsGatewayAliasRecord", {
+    zone: zone,
+    recordName: "ws",
+    target: route53.RecordTarget.fromAlias(
+      new route53targets.ApiGatewayv2DomainProperties(
+        wsDomain.regionalDomainName,
+        wsDomain.regionalHostedZoneId
+      )
+    ),
+  });
+
+  new cdk.CfnOutput(stack, "WebsocketURL", {
+    value: webSocketApi.apiEndpoint,
+  });
+}
+
 export class AwsCdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    const deployFrontend = this.node.tryGetContext("deployFrontend");
 
     //
     // Lookups
@@ -66,189 +267,18 @@ export class AwsCdkStack extends cdk.Stack {
     //
     // Setup frontend
     //
-    const staticBucket = new s3.Bucket(this, "MinesweeperRoyaleStaticBucket", {
-      websiteIndexDocument: "index.html",
-      websiteErrorDocument: "index.html", // Allows other routes to work.  Has SEO implications.  Created robots.txt to minimize implications
-      autoDeleteObjects: true,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-    });
-
-    const OAI = new cloudfront.OriginAccessIdentity(this, "OAI", {
-      comment: "OAI for MinesweeperRoyaleStaticBucket",
-    });
-    staticBucket.grantRead(OAI);
-
-    const distribution = new cloudfront.CloudFrontWebDistribution(
-      this,
-      "StaticDistribution",
-      {
-        viewerCertificate: cloudfront.ViewerCertificate.fromAcmCertificate(
-          globalCertificate,
-          {
-            aliases: ["www.minesweeper-royale.com"],
-            securityPolicy: cloudfront.SecurityPolicyProtocol.TLS_V1_1_2016,
-            sslMethod: cloudfront.SSLMethod.SNI,
-          }
-        ),
-        originConfigs: [
-          {
-            s3OriginSource: {
-              s3BucketSource: staticBucket,
-              originAccessIdentity: OAI,
-            },
-            behaviors: [{ isDefaultBehavior: true }],
-          },
-        ],
-        errorConfigurations: [
-          {
-            errorCode: 404,
-            responseCode: 200,
-            responsePagePath: "/index.html",
-          },
-        ],
-      }
-    );
-
-    new s3deploy.BucketDeployment(this, "DeployStaticAssets", {
-      sources: [s3deploy.Source.asset("../minesweeper-ui/dist")],
-      destinationBucket: staticBucket,
-      distribution,
-      distributionPaths: ["/*"],
-    });
-
-    new route53.ARecord(this, "MinesweeperRoyaleCloudFrontAliasRecord", {
-      zone: zone,
-      recordName: "www",
-      target: route53.RecordTarget.fromAlias(
-        new route53targets.CloudFrontTarget(distribution)
-      ),
-    });
+    if (deployFrontend) {
+      deployFrontend(this, zone, globalCertificate);
+    }
 
     //
     // Setup gameManagerLambda (HTTP/REST)
     //
-    const gameManagerLambda = new lambda.Function(this, "GameManagerFunction", {
-      runtime: lambda.Runtime.NODEJS_18_X,
-      code: lambda.Code.fromAsset("../gameManagerLambda"),
-      handler: "compiled/lambda.handler",
-      reservedConcurrentExecutions: 1,
-      environment: {
-        REGION: this.region,
-        GAME_TABLE_NAME: gameTable.tableName,
-        PRIMARY_KEY: "id",
-        ALLOW_ORIGIN: "*",
-        ALLOW_HEADERS: ALLOW_HEADERS.join(","),
-      },
-    });
-
-    gameTable.grantReadWriteData(gameManagerLambda);
-
-    const httpDomain = new apigw.DomainName(
-      this,
-      "MinesweeperRoyaleApiDomainName",
-      {
-        domainName: "api.minesweeper-royale.com",
-        certificate: regionalCertificate,
-      }
-    );
-
-    const httpApi = new apigw.HttpApi(this, "MinesweeperRoyaleHttpApi", {
-      defaultIntegration: new apigw_integ.HttpLambdaIntegration(
-        "DefaultIntegration",
-        gameManagerLambda
-      ),
-      corsPreflight: {
-        allowOrigins: ALLOW_ORIGINS,
-        allowMethods: [apigw.CorsHttpMethod.ANY], // allow any method
-        allowHeaders: ALLOW_HEADERS,
-      },
-      defaultDomainMapping: {
-        domainName: httpDomain,
-      },
-    });
-
-    new route53.ARecord(this, "MinesweeperRoyaleApiGatewayAliasRecord", {
-      zone: zone,
-      recordName: "api",
-      target: route53.RecordTarget.fromAlias(
-        new route53targets.ApiGatewayv2DomainProperties(
-          httpDomain.regionalDomainName,
-          httpDomain.regionalHostedZoneId
-        )
-      ),
-    });
-
-    new cdk.CfnOutput(this, "ApiGatewayURL", {
-      value: httpApi.apiEndpoint,
-    });
+    deployGameManagerFunction(this, zone, regionalCertificate, gameTable);
 
     //
     // Setup playerActionsLambda (Websocket)
     //
-    const wsDomain = new apigw.DomainName(
-      this,
-      "MinesweeperRoyaleWsDomainName",
-      {
-        domainName: "ws.minesweeper-royale.com",
-        certificate: regionalCertificate,
-      }
-    );
-
-    const webSocketApi = new apigw.WebSocketApi(this, "PlayerActionsWebSocket");
-    const webSocketStage = new apigw.WebSocketStage(
-      this,
-      "MinesweeperRoyaleWsStage",
-      {
-        webSocketApi,
-        stageName: "poc",
-        autoDeploy: true,
-        domainMapping: {
-          domainName: wsDomain,
-        },
-      }
-    );
-
-    const playerActionsLambda = new lambda.Function(
-      this,
-      "PlayerActionsFunction",
-      {
-        runtime: lambda.Runtime.NODEJS_18_X,
-        code: lambda.Code.fromAsset("../playerActionsLambda"),
-        handler: "compiled/playerActions.handler",
-        reservedConcurrentExecutions: 1,
-        environment: {
-          REGION: this.region,
-          API_GW_ENDPOINT: `https://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/${webSocketStage.stageName}/`,
-          GAME_TABLE_NAME: gameTable.tableName,
-          PRIMARY_KEY: "id",
-        },
-      }
-    );
-
-    gameTable.grantReadWriteData(playerActionsLambda);
-    webSocketApi.grantManageConnections(playerActionsLambda);
-
-    webSocketApi.addRoute("$default", {
-      integration: new apigw_integ.WebSocketLambdaIntegration(
-        "DefaultItegration",
-        playerActionsLambda
-      ),
-    });
-
-    new route53.ARecord(this, "MinesweeperRoyaleWsGatewayAliasRecord", {
-      zone: zone,
-      recordName: "ws",
-      target: route53.RecordTarget.fromAlias(
-        new route53targets.ApiGatewayv2DomainProperties(
-          wsDomain.regionalDomainName,
-          wsDomain.regionalHostedZoneId
-        )
-      ),
-    });
-
-    new cdk.CfnOutput(this, "WebsocketURL", {
-      value: webSocketApi.apiEndpoint,
-    });
+    deployPlayerActionsFunction(this, zone, regionalCertificate, gameTable);
   }
 }

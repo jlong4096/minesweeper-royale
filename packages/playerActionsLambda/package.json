@@ -9,7 +9,8 @@
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.359.0",
     "@aws-sdk/client-dynamodb": "^3.360.0",
-    "@aws-sdk/lib-dynamodb": "^3.362.0"
+    "@aws-sdk/lib-dynamodb": "^3.362.0",
+    "playerActions-lib": "1.0.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.119",
