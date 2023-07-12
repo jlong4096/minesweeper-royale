@@ -7,16 +7,18 @@ import {
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
-  GetCommand,
-  GetCommandInput,
-  UpdateCommand,
-  UpdateCommandInput
+  BatchWriteCommand,
+  BatchWriteCommandInput,
+  PutCommand,
+  PutCommandInput,
+  QueryCommand,
+  QueryCommandInput
 } from '@aws-sdk/lib-dynamodb';
 
 import {
-  ReadyMessage,
   ActionMessage,
   JoinedMessage,
+  LeftMessage,
   WelcomeMessage,
   AnnounceMessage
 } from 'playerActions-lib';
@@ -28,24 +30,63 @@ const apigClient = new ApiGatewayManagementApiClient({
 
 const dbClient = new DynamoDBClient({ region: process.env.REGION });
 const dynamodb = DynamoDBDocumentClient.from(dbClient);
-const TableName = process.env.GAME_TABLE_NAME;
-const PrimaryKey = process.env.PRIMARY_KEY || 'id';
+const TableName = process.env.CONNECTIONS_TABLE_NAME || 'ConnectionsTable';
+const PrimaryKey = process.env.PRIMARY_KEY || 'gameId';
 
-async function deleteConnections(gameId: string, connectionIds: string[]) {
-  console.log(`disconnection from ${connectionIds.join(', ')}`);
+async function deleteConnections(
+  gameId: string,
+  removeIds: string[],
+  connectionIds?: string[]
+) {
+  console.log(`disconnection from ${removeIds.join(', ')}`);
 
-  const params: UpdateCommandInput = {
-    TableName,
-    Key: { [PrimaryKey]: gameId },
-    UpdateExpression: 'DELETE #con :removeConnection',
-    ExpressionAttributeNames: { '#con': 'connections' },
-    ExpressionAttributeValues: { ':removeConnection': new Set(connectionIds) }
+  const leftMsg: LeftMessage = {
+    event: 'LEFT',
+    connectionIds: removeIds
   };
 
-  await dynamodb.send(new UpdateCommand(params));
+  // TODO:  Don't send to the removedIds
+  if (Array.isArray(connectionIds) && connectionIds.length) {
+    await sendToAll(gameId, connectionIds, JSON.stringify(leftMsg), false);
+  }
+
+  console.log('deleting connections');
+
+  const requests = removeIds.map((connectionId) => ({
+    DeleteRequest: {
+      Key: {
+        [PrimaryKey]: gameId,
+        connectionId
+      }
+    }
+  }));
+
+  const params: BatchWriteCommandInput = {
+    RequestItems: {
+      [TableName]: requests
+    }
+  };
+
+  const res = await dynamodb.send(new BatchWriteCommand(params));
+
+  const insertCount =
+    removeIds.length - (res.UnprocessedItems?.[TableName] || []).length;
+
+  if (insertCount < removeIds.length) {
+    console.warn(
+      `Failed to remove ${removeIds.length - insertCount} connections`
+    );
+  } else {
+    console.log(`Successfully removed ${insertCount} connections`);
+  }
 }
 
-async function sendToAll(gameId: string, connections: string[], body: string) {
+async function sendToAll(
+  gameId: string,
+  connections: string[],
+  body: string,
+  autoDisconnect = true
+) {
   // Send a message to the clients
   console.log(`sending to ${connections.length}`);
 
@@ -76,41 +117,42 @@ async function sendToAll(gameId: string, connections: string[], body: string) {
 
   await Promise.all(promises);
 
-  if (goneConnections.length) {
-    deleteConnections(gameId, goneConnections);
+  if (autoDisconnect && goneConnections.length) {
+    await deleteConnections(gameId, goneConnections, connections);
   }
 }
 
-async function handleNewConnection(connectionId: string, action: ReadyMessage) {
+async function handleNewConnection(connectionId: string, gameId: string) {
   // Store connectionId
-  console.log(`connection from ${connectionId} for ${action.gameId}`);
+  console.log(`connection from ${connectionId} for ${gameId}`);
 
-  const params: UpdateCommandInput = {
+  const newConnectionParams: PutCommandInput = {
     TableName,
-    Key: {
-      [PrimaryKey]: action.gameId
-    },
-    UpdateExpression: 'ADD #con :newConnection',
-    ExpressionAttributeNames: { '#con': 'connections' },
-    ExpressionAttributeValues: {
-      ':newConnection': new Set([connectionId])
-    },
-    ReturnValues: 'ALL_NEW'
+    Item: {
+      [PrimaryKey]: gameId,
+      connectionId
+    }
   };
 
-  const { Attributes } = await dynamodb.send(new UpdateCommand(params));
-  console.log(Attributes);
-  const connections = Array.from(Attributes?.connections) as string[];
-  if (!connections) {
-    throw new Error('Failed to add connection to game');
+  try {
+    await dynamodb.send(new PutCommand(newConnectionParams));
+  } catch (err: any) {
+    console.error(`cannot add ${connectionId} to ${gameId}: ${err}`);
+    throw err;
   }
 
-  // Let cliet know connectionId
+  const connections = await queryGameConnections(gameId);
+
+  // setTimeout(async () => {
+  // Let client know connectionId
+  // Cannot send a message during the connection open event.  Using setTimeout to send the message on the next event loop.
   const joinedMsg: JoinedMessage = {
     event: 'JOINED',
     connectionId,
     allConnectionIds: connections
   };
+
+  console.log(`sending JOINED message to ${connectionId}`);
 
   const postCommand = new PostToConnectionCommand({
     ConnectionId: connectionId,
@@ -120,7 +162,7 @@ async function handleNewConnection(connectionId: string, action: ReadyMessage) {
     await apigClient.send(postCommand);
   } catch (error: any) {
     if (error.statusCode === 410) {
-      deleteConnections(action.gameId, [connectionId]);
+      deleteConnections(gameId, [connectionId]);
     } else {
       // Other error. You might want to handle this differently.
       console.error(
@@ -129,42 +171,81 @@ async function handleNewConnection(connectionId: string, action: ReadyMessage) {
       );
     }
   }
+  // }, 1000);
+
   // Announce new connection to others
   const welcomeMsg: WelcomeMessage = {
     event: 'WELCOME',
     newConnectionId: connectionId
   };
+
+  console.log(`sending WELCOME message to ${connections.length} others`);
   await sendToAll(
-    action.gameId,
+    gameId,
     connections.filter((c) => c !== connectionId),
     JSON.stringify(welcomeMsg)
   );
 }
 
-async function handleActionEvent(connectionId: string, action: ActionMessage) {
-  const gameId = action.gameId;
-
-  const params: GetCommandInput = {
+async function queryGameConnections(gameId: string): Promise<string[]> {
+  console.log(`getting other connections for ${gameId}`);
+  const queryOtherConnectionsParams: QueryCommandInput = {
     TableName,
-    Key: { [PrimaryKey]: action.gameId },
-    ProjectionExpression: 'connections'
+    KeyConditionExpression: `${PrimaryKey} = :id`,
+    ExpressionAttributeValues: { ':id': gameId }
   };
 
   const connections: string[] = [];
   try {
-    const { Item } = await dynamodb.send(new GetCommand(params));
-    if (Item) {
-      connections.push(...Item.connections);
+    const data = await dynamodb.send(
+      new QueryCommand(queryOtherConnectionsParams)
+    );
+    if (data && Array.isArray(data.Items)) {
+      connections.push(...data.Items.map((x) => x.connectionId));
+    }
+  } catch (err: any) {
+    console.error(`cannot get other connections from gameId ${gameId}: ${err}`);
+    throw err;
+  }
+
+  return connections;
+}
+
+async function handleEndConnection(connectionId: string) {
+  const queryGameIdParams: QueryCommandInput = {
+    TableName,
+    IndexName: 'ConnectionIndex', // use the GSI
+    KeyConditionExpression: 'connectionId = :connectionId',
+    ExpressionAttributeValues: { ':connectionId': connectionId }
+  };
+
+  let gameId = '';
+  try {
+    const { Items } = await dynamodb.send(new QueryCommand(queryGameIdParams));
+    if (Array.isArray(Items) && Items.length) {
+      gameId = Items[0].gameId;
     }
   } catch (err: any) {
     console.error(
-      `cannot get connections from gameId ${action.gameId}:  ${err}`
+      `cannot get gameId from connectionId ${connectionId}:  ${err}`
     );
     throw err;
   }
 
-  const msg: AnnounceMessage = { ...action, event: 'ACTION', connectionId };
+  if (!gameId) {
+    throw new Error(`cannot get gameId from connectionId ${connectionId}`);
+  }
 
+  const connections = await queryGameConnections(gameId);
+  console.log(`removing ${connectionId} from ${gameId}`);
+  deleteConnections(gameId, [connectionId], connections);
+}
+
+async function handleActionEvent(connectionId: string, action: ActionMessage) {
+  const gameId = action.gameId;
+  const connections = await queryGameConnections(gameId);
+
+  const msg: AnnounceMessage = { ...action, event: 'ACTION', connectionId };
   await sendToAll(gameId, connections, JSON.stringify(msg));
 }
 
@@ -174,7 +255,15 @@ exports.handler = async function (
 ) {
   const connectionId = event.requestContext.connectionId;
 
-  if (event.requestContext.eventType === 'MESSAGE') {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const gameId = event.queryStringParameters?.gameId;
+
+  if (event.requestContext.eventType === 'CONNECT') {
+    await handleNewConnection(connectionId, gameId);
+  } else if (event.requestContext.eventType === 'DISCONNECT') {
+    await handleEndConnection(connectionId);
+  } else if (event.requestContext.eventType === 'MESSAGE') {
     const action = JSON.parse(event.body || '{}');
     console.log(
       `message ${event.body} received from ${connectionId} for ${action.gameId}`
@@ -185,9 +274,13 @@ exports.handler = async function (
     // for the life of the game or life of the lambda function.
     // Until then, doing expensive look-ups with each message.
 
-    if (action.event === 'READY') {
-      await handleNewConnection(connectionId, action);
-    } else if (action.event === 'ACTION') {
+    // if (action.event === 'READY') {
+    //   await handleNewConnection(connectionId, action);
+    // } else if (action.event === 'ACTION') {
+    //   await handleActionEvent(connectionId, action);
+    // }
+
+    if (action.event === 'ACTION') {
       await handleActionEvent(connectionId, action);
     }
   }

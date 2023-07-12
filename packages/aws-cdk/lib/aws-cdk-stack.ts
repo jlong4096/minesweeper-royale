@@ -158,7 +158,7 @@ function deployPlayerActionsFunction(
   stack: cdk.Stack,
   zone: route53.IHostedZone,
   regionalCertificate: acm.ICertificate,
-  gameTable: dynamodb.Table
+  connectionsTable: dynamodb.Table
 ) {
   const wsDomain = new apigw.DomainName(
     stack,
@@ -194,18 +194,32 @@ function deployPlayerActionsFunction(
       environment: {
         REGION: stack.region,
         API_GW_ENDPOINT: `https://${webSocketApi.apiId}.execute-api.${stack.region}.amazonaws.com/${webSocketStage.stageName}/`,
-        GAME_TABLE_NAME: gameTable.tableName,
-        PRIMARY_KEY: "id",
+        CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
+        PRIMARY_KEY: "gameId",
       },
     }
   );
 
-  gameTable.grantReadWriteData(playerActionsLambda);
+  connectionsTable.grantReadWriteData(playerActionsLambda);
   webSocketApi.grantManageConnections(playerActionsLambda);
 
   webSocketApi.addRoute("$default", {
     integration: new apigw_integ.WebSocketLambdaIntegration(
       "DefaultItegration",
+      playerActionsLambda
+    ),
+  });
+
+  webSocketApi.addRoute("$connect", {
+    integration: new apigw_integ.WebSocketLambdaIntegration(
+      "ConnectIntegration",
+      playerActionsLambda
+    ),
+  });
+
+  webSocketApi.addRoute("$disconnect", {
+    integration: new apigw_integ.WebSocketLambdaIntegration(
+      "DisconnectIntegration",
       playerActionsLambda
     ),
   });
@@ -264,6 +278,28 @@ export class AwsCdkStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    const connectionsTable = new dynamodb.Table(this, "ConnectionTable", {
+      partitionKey: {
+        name: "gameId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: "connectionId", type: dynamodb.AttributeType.STRING },
+      // billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    });
+
+    connectionsTable.addGlobalSecondaryIndex({
+      indexName: "ConnectionIndex",
+      partitionKey: {
+        name: "connectionId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL, // project all attributes into the index
+    });
+
+    //
+    // Setup SQS
+    //
+
     //
     // Setup frontend
     //
@@ -279,6 +315,11 @@ export class AwsCdkStack extends cdk.Stack {
     //
     // Setup playerActionsLambda (Websocket)
     //
-    deployPlayerActionsFunction(this, zone, regionalCertificate, gameTable);
+    deployPlayerActionsFunction(
+      this,
+      zone,
+      regionalCertificate,
+      connectionsTable
+    );
   }
 }
