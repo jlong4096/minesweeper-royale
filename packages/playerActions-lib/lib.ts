@@ -7,6 +7,7 @@
 // JoinedMessage - Server let newly Ready client know about the game state
 export interface JoinedMessage {
   event: 'JOINED';
+  gameId: string;
   connectionId: string;
   allConnectionIds: string[];
 }
@@ -26,7 +27,6 @@ export interface LeftMessage {
 // ActionMessage - Client lets server know of play
 export interface ActionMessage {
   event: 'ACTION';
-  gameId: string; // Could probably be looked up by connectionId
   left?: { x: number; y: number };
   right?: { x: number; y: number };
 }

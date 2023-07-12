@@ -8,10 +8,10 @@ import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as route53targets from "aws-cdk-lib/aws-route53-targets";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as sqs from "aws-cdk-lib/aws-sqs";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import * as apigw from "@aws-cdk/aws-apigatewayv2-alpha";
 import * as apigw_integ from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
-import * as iam from "aws-cdk-lib/aws-iam";
-import * as logs from "aws-cdk-lib/aws-logs";
 
 const ALLOW_ORIGINS = [
   "http://localhost:5173",
@@ -158,8 +158,8 @@ function deployPlayerActionsFunction(
   stack: cdk.Stack,
   zone: route53.IHostedZone,
   regionalCertificate: acm.ICertificate,
-  connectionsTable: dynamodb.Table
-) {
+  queue: sqs.Queue
+): [apigw.WebSocketApi, string] {
   const wsDomain = new apigw.DomainName(
     stack,
     "MinesweeperRoyaleWsDomainName",
@@ -193,15 +193,12 @@ function deployPlayerActionsFunction(
       reservedConcurrentExecutions: 1,
       environment: {
         REGION: stack.region,
-        API_GW_ENDPOINT: `https://${webSocketApi.apiId}.execute-api.${stack.region}.amazonaws.com/${webSocketStage.stageName}/`,
-        CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
-        PRIMARY_KEY: "gameId",
+        QUEUE_URL: queue.queueUrl,
       },
     }
   );
 
-  connectionsTable.grantReadWriteData(playerActionsLambda);
-  webSocketApi.grantManageConnections(playerActionsLambda);
+  queue.grantSendMessages(playerActionsLambda);
 
   webSocketApi.addRoute("$default", {
     integration: new apigw_integ.WebSocketLambdaIntegration(
@@ -238,6 +235,8 @@ function deployPlayerActionsFunction(
   new cdk.CfnOutput(stack, "WebsocketURL", {
     value: webSocketApi.apiEndpoint,
   });
+
+  return [webSocketApi, webSocketStage.stageName];
 }
 
 export class AwsCdkStack extends cdk.Stack {
@@ -297,10 +296,6 @@ export class AwsCdkStack extends cdk.Stack {
     });
 
     //
-    // Setup SQS
-    //
-
-    //
     // Setup frontend
     //
     if (deployFrontend) {
@@ -315,11 +310,33 @@ export class AwsCdkStack extends cdk.Stack {
     //
     // Setup playerActionsLambda (Websocket)
     //
-    deployPlayerActionsFunction(
+    const queue = new sqs.Queue(this, "PlayerActionsQueue");
+    const [wsApi, stageName] = deployPlayerActionsFunction(
       this,
       zone,
       regionalCertificate,
-      connectionsTable
+      queue
     );
+
+    //
+    // Setup playerActionEventsLambda
+    //
+    const sqsHandler = new lambda.Function(this, "sqsHandler", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      code: lambda.Code.fromAsset("../playerActionEventsLambda"),
+      handler: "compiled/sqsHandler.handler",
+      events: [new SqsEventSource(queue)],
+      reservedConcurrentExecutions: 1,
+      environment: {
+        REGION: this.region,
+        API_GW_ENDPOINT: `https://${wsApi.apiId}.execute-api.${this.region}.amazonaws.com/${stageName}/`,
+        CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
+        PRIMARY_KEY: "gameId",
+      },
+    });
+
+    connectionsTable.grantReadWriteData(sqsHandler);
+    wsApi.grantManageConnections(sqsHandler);
+    queue.grantConsumeMessages(sqsHandler);
   }
 }

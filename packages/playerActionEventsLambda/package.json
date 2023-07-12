@@ -1,5 +1,5 @@
 {
-  "name": "playerActionsLambda",
+  "name": "playerActionEventsLambda",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.359.0",
-    "@aws-sdk/client-sqs": "^3.369.0",
+    "@aws-sdk/client-dynamodb": "^3.360.0",
+    "@aws-sdk/lib-dynamodb": "^3.362.0",
     "playerActions-lib": "1.0.0"
   },
   "devDependencies": {
